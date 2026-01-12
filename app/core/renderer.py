@@ -41,8 +41,8 @@ def write_markdown_file(categorized_articles, output_filename=""):
                     # Format sources as (Source: Link1, Link2)
                     source_line = ", ".join([f"[{s['name']}]({s['link']})" for s in article['sources']])
                     
-                    # Article Title with Source Links
-                    f.write(f"### {article['translated_title']} (Source: {source_line})\n\n")
+                    # Article Title with Source Links (Smaller font for Source)
+                    f.write(f"### {article['translated_title']} <small>(Source: {source_line})</small>\n\n")
                     
                     # Translated Summary
                     if article['translated_summary']:
