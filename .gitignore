@@ -8,3 +8,4 @@ __pycache__/
 # 忽略 VSCode 和其他编辑器/IDE 的配置
 .vscode/
 .idea/
+output/
