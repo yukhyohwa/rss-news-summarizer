@@ -105,7 +105,10 @@
         "Investment",
         "VC",
         "PE",
-        "Securities"
+        "Securities",
+        "Tariff",
+        "关税",
+        "Droit de douane"
     ],
     "Politics & International": [
         "选举",
@@ -142,8 +145,6 @@
         "白宫",
         "Sanction",
         "制裁",
-        "Tariff",
-        "关税",
         "Border",
         "Government",
         "Congress",
@@ -153,7 +154,15 @@
         "Protest",
         "抗议",
         "Iran",
-        "伊朗"
+        "伊朗",
+        "极右翼",
+        "Far-right",
+        "Extreme right",
+        "政党",
+        "Political party",
+        "伊斯兰国",
+        "ISIS",
+        "Islamic State"
     ],
     "Energy & Environment": [
         "石油",
