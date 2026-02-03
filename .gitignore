@@ -1,11 +1,11 @@
-# 忽略存放敏感信息的 .env 文件
+# Ignore .env file
 .env
 
-# 忽略 Python 缓存
+# Ignore Python cache
 __pycache__/
 *.pyc
 
-# 忽略 VSCode 和其他编辑器/IDE 的配置
+# Ignore VSCode and other editor/IDE configuration files
 .vscode/
 .idea/
 output/
