@@ -6,3 +6,4 @@ beautifulsoup4
 yfinance
 python-dotenv
 curl_cffi
+markdown
