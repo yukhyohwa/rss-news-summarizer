@@ -1,6 +1,8 @@
 import json
 import os
+import re
 from datetime import datetime, timedelta, timezone
+from config.settings import BLOCKED_KEYWORDS, SHOW_IMAGES
 from tqdm import tqdm
 
 def load_categories():
@@ -17,7 +19,7 @@ def load_categories():
     return {}
 
 def apply_keyword_categorization(articles):
-    """Categorizes articles based on defined keywords."""
+    """Categorizes articles based on defined keywords with smart matching."""
     print("\n[Stage 3.5/5] Categorizing articles based on keywords...")
     categories = load_categories()
     if not categories:
@@ -26,23 +28,54 @@ def apply_keyword_categorization(articles):
         return articles
 
     for article in tqdm(articles, desc="Categorizing"):
-        # Match title and summary
-        text_to_search = f"{article.get('translated_title', article.get('title', ''))} {article.get('translated_summary', article.get('summary', ''))}"
-        text_to_search = text_to_search.lower()
+        # Combine original and translated text for maximum matching coverage
+        original_text = f"{article.get('title', '')} {article.get('summary', '')}"
+        translated_text = f"{article.get('translated_title', '')} {article.get('translated_summary', '')}"
+        text_to_search = f"{original_text} {translated_text}".lower()
         
         assigned_category = "Others"
+        
+        # Priority: Check keyword matches
+        found_match = False
         for category, keywords in categories.items():
             if category == "Others": continue
-            if any(kw.lower() in text_to_search for kw in keywords):
+            
+            matched = False
+            for kw in keywords:
+                kw_lower = kw.lower()
+                
+                # Rule: For very short English alphanumeric keywords (e.g., 'AI', 'AR'), 
+                # use whole-word matching. 
+                # Note: We use isascii() to ensure this doesn't kill Chinese keyword matching.
+                if len(kw_lower) <= 3 and kw_lower.isalnum() and kw_lower.isascii():
+                    pattern = rf'\b{re.escape(kw_lower)}\b'
+                    if re.search(pattern, text_to_search):
+                        matched = True
+                        break
+                # Rule: Substring match for Chinese or longer English terms
+                else:
+                    if kw_lower in text_to_search:
+                        matched = True
+                        break
+            
+            if matched:
                 assigned_category = category
+                found_match = True
                 break
         
+        # Secondary Logic: Special handling for specific sources (BBC, NYT)
+        if not found_match and article.get('source_name') in ['anyfeeder', 'nytimes']:
+            assigned_category = "Politics & International"
+
         article['category'] = assigned_category
     
     return articles
 
 def filter_articles(articles, days=None, start_date=None, end_date=None):
-    """Filters articles within the specified time range."""
+    """
+    Filters articles within the specified time range and 
+    removes articles containing blocked keywords.
+    """
     if start_date and end_date:
         start_time = start_date
         end_time = end_date
@@ -52,7 +85,24 @@ def filter_articles(articles, days=None, start_date=None, end_date=None):
         start_time = end_time - timedelta(days=days_to_filter)
 
     filtered_articles = []
+    blocked_count = 0
+
     for article in articles:
+        # 1. Blocklist Filtering (Check title and summary)
+        title = article.get('title', '').lower()
+        summary = article.get('summary', '').lower()
+        
+        is_blocked = False
+        for kw in BLOCKED_KEYWORDS:
+            if kw.lower() in title or kw.lower() in summary:
+                is_blocked = True
+                break
+        
+        if is_blocked:
+            blocked_count += 1
+            continue
+
+        # 2. Date Filtering
         published_time = article.get('published')
         if not published_time:
             filtered_articles.append(article)
@@ -62,6 +112,23 @@ def filter_articles(articles, days=None, start_date=None, end_date=None):
         
         if start_time <= published_time <= end_time:
             filtered_articles.append(article)
+    
+    if blocked_count > 0:
+        print(f"    🚫 Filtered out {blocked_count} articles based on blocklist.")
+    
+    # Optional: Cleanup summaries for a cleaner report (and save translation tokens)
+    if not SHOW_IMAGES:
+        for article in filtered_articles:
+            summary = article.get('summary', '')
+            if summary:
+                # 1. Remove Markdown image syntax: ![alt](url)
+                summary = re.sub(r'!\[[^\]]*\]\([^\)]*\)', '', summary)
+                # 2. Remove ALL HTML tags (including <b>, <strong>, <img>, <a> etc.)
+                # This ensures the report is plain text and not bolded by source styles
+                summary = re.sub(r'<[^>]+>', '', summary)
+                # 3. Cleanup escaping/excess whitespace
+                article['summary'] = summary.strip()
+        
     return filtered_articles
 
 def deduplicate_and_merge_articles(articles):

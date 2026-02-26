@@ -20,10 +20,23 @@ def fetch_feed(feed_url):
     """
     print(f"  - Fetching: {feed_url}")
     try:
-        feed = feedparser.parse(feed_url)
+        # Use a common browser User-Agent to avoid being blocked (403 Forbidden)
+        user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         
+        feed = feedparser.parse(feed_url, agent=user_agent)
+        
+        # Check for HTTP errors (like 403)
+        status = getattr(feed, 'status', None)
+        if status and status >= 400:
+            print(f"    ❌ HTTP Error {status}: {feed_url}")
+            return []
+
         if feed.bozo:
-            print(f"    ⚠️ Warning: Potential feed format issue: {feed_url}, Bozo Error: {feed.bozo_exception}")
+            # Bozo error can sometimes be ignored if entries are still present
+            if not feed.entries:
+                print(f"    ⚠️ Warning: Potential feed format issue: {feed_url}, Bozo Error: {feed.bozo_exception}")
+            else:
+                pass # Many feeds have minor XML errors but work fine
 
         source_name = get_source_name(feed_url)
         articles = []
