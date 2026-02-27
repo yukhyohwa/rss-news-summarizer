@@ -2,6 +2,7 @@
 import os
 import datetime
 from app.core.arb_reporter import fetch_daily_data, format_liq, format_table
+from app.core.processor import truncate_summary
 from config.settings import STRATEGY_CONFIG
 
 def generate_unified_report(categorized_news=None, include_arb=True):
@@ -34,7 +35,8 @@ def generate_unified_report(categorized_news=None, include_arb=True):
                 source_line = ", ".join([f"[{s['name']}]({s['link']})" for s in article['sources']])
                 report_content += f"#### {article['translated_title']} (Source: {source_line})\n\n"
                 if article['translated_summary']:
-                    report_content += f"{article['translated_summary']}\n\n"
+                    truncated_summary = truncate_summary(article['translated_summary'], word_limit=100)
+                    report_content += f"{truncated_summary}\n\n"
                 report_content += "---\n\n"
     
     # 2. Arbitrage Section (from DB)

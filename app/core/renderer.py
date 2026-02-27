@@ -1,6 +1,6 @@
-# renderer.py
 import datetime
 import os
+from app.core.processor import truncate_summary
 
 def write_markdown_file(categorized_articles, output_filename=""):
     """
@@ -48,7 +48,8 @@ def write_markdown_file(categorized_articles, output_filename=""):
                     
                     # Translated Summary
                     if article['translated_summary']:
-                        f.write(f"{article['translated_summary']}\n\n")
+                        truncated_summary = truncate_summary(article['translated_summary'], word_limit=100)
+                        f.write(f"{truncated_summary}\n\n")
                     
                     f.write("---\n\n")
         
