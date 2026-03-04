@@ -20,6 +20,28 @@ def fetch_daily_data(table_name, date_str, columns="*"):
     finally:
         conn.close()
 
+def fetch_latest_data(table_name, columns="*", limit=50):
+    """Fetches the latest available records from a table regardless of date."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # First find the latest date
+        cursor.execute(f"SELECT MAX(date) FROM {table_name}")
+        latest_date = cursor.fetchone()[0]
+        
+        if not latest_date:
+            return [], []
+            
+        cursor.execute(f"SELECT {columns} FROM {table_name} WHERE date = ? LIMIT ?", (latest_date, limit))
+        rows = cursor.fetchall()
+        col_names = [description[0] for description in cursor.description]
+        return rows, col_names, latest_date
+    except sqlite3.Error as e:
+        print(f"Error reading latest {table_name}: {e}")
+        return [], [], None
+    finally:
+        conn.close()
+
 def format_liq(val):
     """Formats liquidity value (assumes units are in 'Wan')."""
     if val >= 10000:

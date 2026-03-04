@@ -31,6 +31,7 @@ from app.collectors.spac_arbitrage import main as run_spac_arbitrage
 from app.collectors.cef_arbitrage import main as run_cef_arbitrage
 from app.collectors.qdii_arbitrage import main as run_qdii_arbitrage
 from app.collectors.cbond_monitor import main as run_cbond_monitor
+from app.collectors.market_indices import main as run_market_indices
 
 def run_news_pipeline(days=1, start_date=None, end_date=None):
     """Fetches and processes news, returns categorized articles."""
@@ -75,7 +76,8 @@ def run_arb_pipeline():
         ("SPAC Arbitrage", run_spac_arbitrage),
         ("CEF Arbitrage", run_cef_arbitrage),
         ("QDII Arbitrage", run_qdii_arbitrage),
-        ("Cbond Monitor", run_cbond_monitor)
+        ("Cbond Monitor", run_cbond_monitor),
+        ("Market Indices", run_market_indices)
     ]
     
     for name, task in tasks:
