@@ -33,7 +33,7 @@ def generate_unified_report(categorized_news=None, include_arb=True):
             report_content += f"### 📰 {category} ({len(articles)} items)\n\n"
             for article in articles:
                 source_line = ", ".join([f"[{s['name']}]({s['link']})" for s in article['sources']])
-                report_content += f"#### {article['translated_title']} (Source: {source_line})\n"
+                report_content += f"#### ● {article['translated_title']} (Source: {source_line})\n"
                 if article['translated_summary']:
                     truncated_summary = truncate_summary(article['translated_summary'], word_limit=100)
                     report_content += f"{truncated_summary}\n"

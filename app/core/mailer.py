@@ -50,7 +50,9 @@ def send_report_email(report_path):
         body {{ font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }}
         h1 {{ color: #1a73e8; border-bottom: 2px solid #eee; padding-bottom: 10px; }}
         h2 {{ color: #202124; margin-top: 30px; border-left: 4px solid #1a73e8; padding-left: 10px; }}
-        h3 {{ color: #444; }}
+        h3 {{ color: #444; margin-bottom: 15px; }}
+        h4 {{ color: #000; margin-top: 15px; margin-bottom: 5px; font-size: 1.1em; }}
+        p {{ margin-top: 0; margin-bottom: 10px; }}
         table {{ border-collapse: collapse; width: 100%; margin: 20px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
         th {{ background-color: #f8f9fa; color: #5f6368; font-weight: bold; border: 1px solid #dee2e6; padding: 12px; text-align: left; }}
         td {{ border: 1px solid #dee2e6; padding: 12px; }}
