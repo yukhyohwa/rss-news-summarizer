@@ -33,11 +33,11 @@ def generate_unified_report(categorized_news=None, include_arb=True):
             report_content += f"### 📰 {category} ({len(articles)} items)\n\n"
             for article in articles:
                 source_line = ", ".join([f"[{s['name']}]({s['link']})" for s in article['sources']])
-                report_content += f"#### {article['translated_title']} (Source: {source_line})\n\n"
+                report_content += f"#### {article['translated_title']} (Source: {source_line})\n"
                 if article['translated_summary']:
                     truncated_summary = truncate_summary(article['translated_summary'], word_limit=100)
-                    report_content += f"{truncated_summary}\n\n"
-                report_content += "---\n\n"
+                    report_content += f"{truncated_summary}\n"
+                report_content += "\n"
     
     # 2. Arbitrage Section (from DB)
     if include_arb:
@@ -158,7 +158,7 @@ def generate_unified_report(categorized_news=None, include_arb=True):
             report_content += "*No SPAC arbitrage opportunities found today.*\n\n"
 
         # 11. CEF
-        report_content += f"### 11. CEF Arbitrage (Disc < {STRATEGY_CONFIG['cef']['min_discount']}%)\n"
+        report_content += f"### 11. CEF Arbitrage (Disc < {STRATEGY_CONFIG['cef']['min_discount']}%, Vol USD >= 10,000K)\n"
         rows, cols = fetch_daily_data('cef_arbitrage', today)
         if rows:
             display_rows = []
@@ -166,9 +166,18 @@ def generate_unified_report(categorized_news=None, include_arb=True):
                 ticker, price, discount, avg_disc, zscore = r[1], r[5], r[7], r[8], r[9]
                 diff = discount - avg_disc
                 vol_usd = (r[10] or 0) * price
+                
+                # Volume Filter: Vol USD >= 10000k (10,000,000 USD)
+                if vol_usd < 10000000:
+                    continue
+                    
                 dist_status = r[11] if len(r) > 11 else ""
                 display_rows.append([ticker, r[2], f"{discount:.2f}%", f"{diff:.2f}%", f"{zscore:.2f}", f"${vol_usd/1000:.0f}K", dist_status])
-            report_content += format_table(display_rows, ['Ticker', 'Name', 'Discount', 'Diff', 'Z-Score', 'Vol USD', 'Div Qual'], ['left', 'left', 'right', 'right', 'right', 'right', 'left']) + "\n\n"
+            
+            if display_rows:
+                report_content += format_table(display_rows, ['Ticker', 'Name', 'Discount', 'Diff', 'Z-Score', 'Vol USD', 'Div Qual'], ['left', 'left', 'right', 'right', 'right', 'right', 'left']) + "\n\n"
+            else:
+                report_content += "*No CEF arbitrage opportunities meeting the volume criteria found today.*\n\n"
         else:
             report_content += "*No CEF arbitrage opportunities found today.*\n\n"
 
