@@ -26,6 +26,7 @@ URLS = {
 PREMIUM_THRESHOLD = config.get('min_premium_rate', 2.0)
 MIN_AMOUNT_THRESHOLD = config.get('min_fund_share', 100000) / 10000.0  # Convert to 'Wan'
 MIN_VOLUME_THRESHOLD = config.get('min_turnover', 10000) / 10000.0    # Convert to 'Wan'
+ONLY_OPEN_APPLY = config.get('only_open_apply', True)
 
 def fetch_qdii_data(market_name, url):
     """Fetch QDII data from the given URL and return filtered list."""
@@ -72,14 +73,26 @@ def fetch_qdii_data(market_name, url):
 
                 # Price and NAV/Estimate for calculation
                 price_val = cell.get('price')
-                # T-1 NAV (fund_nav) and Realtime Estimate (estimate_value2)
+                # T-1 NAV (fund_nav is typically T-2 for QDII) and Realtime Estimate (estimate_value2)
                 nav_val = cell.get('fund_nav') 
                 est2_val = cell.get('estimate_value2')
                 
-                # Manual Premium Calculation (Guest-proof and account-robust)
+                # T-1 index change for T-1 NAV estimation
+                ref_inc_rt_str = str(cell.get('ref_increase_rt', '0')).replace('%', '')
+                try:
+                    ref_inc_rt = float(ref_inc_rt_str)
+                except ValueError:
+                    ref_inc_rt = 0.0
+                
+                # Manual Premium Calculation
                 premium_rate = 0.0
                 if price_val not in (None, '-', 'buy', '登录查看') and nav_val not in (None, '-', 'buy', '登录查看'):
-                    premium_rate = (float(price_val) - float(nav_val)) / float(nav_val) * 100
+                    p = float(price_val)
+                    n = float(nav_val)
+                    # For QDII, estimate T-1 NAV using T-2 NAV and T-1 index change
+                    estimated_nav = n * (1 + ref_inc_rt / 100.0)
+                    if estimated_nav > 0:
+                        premium_rate = (p - estimated_nav) / estimated_nav * 100
                 
                 realtime_premium_rate = 0.0
                 if price_val not in (None, '-', 'buy', '登录查看') and est2_val not in (None, '-', 'buy', '登录查看'):
@@ -95,9 +108,13 @@ def fetch_qdii_data(market_name, url):
                 max_premium = max(premium_rate, realtime_premium_rate)
                 
                 apply_status = cell.get('apply_status', '')
+                is_open = '开放' in apply_status or not apply_status
                 
-                # Filter: Premium > Threshold AND Liquid AND Not Suspended
-                if max_premium > PREMIUM_THRESHOLD and is_liquid and apply_status != '暂停申购':
+                # Filter: Premium > Threshold AND Liquid AND (Optionally) Open for Apply
+                if max_premium > PREMIUM_THRESHOLD and is_liquid:
+                    if ONLY_OPEN_APPLY and not is_open:
+                        continue
+                        
                     fund_info = {
                         'fund_id': fund_id,
                         'fund_name': fund_name,

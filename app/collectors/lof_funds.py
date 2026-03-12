@@ -6,117 +6,108 @@ from app.core.db import save_data
 from app.core.jsl_session import get_jsl_session
 from config.settings import STRATEGY_CONFIG
 
-# Load environment variables
 load_dotenv()
-
 config = STRATEGY_CONFIG['lof']
 
 # Configuration
-STOCK_LOF_URL = "https://www.jisilu.cn/data/lof/stock_lof_list/"
-INDEX_LOF_URL = "https://www.jisilu.cn/data/lof/index_lof_list/"
+URLS = {
+    "Stock LOF": "https://www.jisilu.cn/data/lof/stock_lof_list/",
+    "Index LOF": "https://www.jisilu.cn/data/lof/index_lof_list/"
+}
 
-# Thresholds from settings
-PREMIUM_THRESHOLD = config['min_premium_rate']
-MIN_AMOUNT_THRESHOLD = config['min_fund_share'] / 10000.0  # Convert to 'Wan'
-MIN_VOLUME_THRESHOLD = config['min_turnover'] / 10000.0    # Convert to 'Wan'
+# Thresholds
+PREMIUM_THRESHOLD = config.get('min_premium_rate', 3.5)
+MIN_SHARE = config.get('min_fund_share', 5000000) / 10000.0  # 转为'万份'
+MIN_TURNOVER = config.get('min_turnover', 500000) / 10000.0    # 转为'万元'
+ONLY_OPEN = config.get('only_open_apply', True)
 
 def fetch_data(url, fund_type):
-    """Fetch data from the given URL and return filtered list."""
-    print(f"Fetching {fund_type} data from {url}...")
-    
-    # Simulate user browsing behavior with random sleep
-    sleep_time = random.uniform(3, 8)
-    print(f"Sleeping for {sleep_time:.2f} seconds...")
-    time.sleep(sleep_time)
-    
-    # Get session (ensures active login)
+    print(f"\n[+] 正在抓取 {fund_type} (URL: {url})...")
     session = get_jsl_session()
     
     try:
-        # Add timestamp to params to prevent caching
         params = {
-            'rp': 500,
+            'rp': 500,  # 登录状态下 rp=500 是有效的，可一次拿全量
             'page': 1,
             '___jsl': f'LST___t={int(time.time() * 1000)}'
         }
         
-        # Use simple POST instead of session.post with custom headers if session already handles it
         response = session.post(url, data=params)
-        
         if response.status_code != 200:
-            print(f"Failed to fetch data. Status code: {response.status_code}")
+            print(f"[!] 请求失败: {response.status_code}")
             return []
             
-        try:
-            data = response.json()
-        except Exception as e:
-            print(f"Failed to decode JSON. Response text preview: {response.text[:200]}")
-            return []
-            
+        data = response.json()
         rows = data.get('rows', [])
+        print(f"[*] 接口返回原始数据：{len(rows)} 条")
         
         results = []
         for row in rows:
             cell = row.get('cell', {})
-            try:
-                # Extract Price and NAV for manual calculation (robust to guest/missing fields)
-                price_val = cell.get('price')
-                fund_nav = cell.get('fund_nav') # Some endpoints use fund_nav
-                
-                # Check for valid price and NAV (especially for guest users or hidden rows)
-                if price_val in (None, '-', '登录查看') or fund_nav in (None, '-', '登录查看'):
-                    continue
-                
-                price = float(price_val)
-                nav = float(fund_nav)
-                
-                # Formula: (Price - NAV) / NAV * 100
-                premium_rate = ((price - nav) / nav) * 100
-                
-                # Liquidity/Size Filter
-                amount = float(str(cell.get('amount', 0)).replace(',', ''))
-                volume = float(str(cell.get('volume', 0)).replace(',', ''))
-                
-                is_liquid = (amount > MIN_AMOUNT_THRESHOLD) or (volume > MIN_VOLUME_THRESHOLD)
-                
-                if premium_rate > PREMIUM_THRESHOLD and is_liquid:
-                    fund_info = {
-                        'fund_id': cell.get('fund_id'),
-                        'fund_name': cell.get('fund_nm'),
-                        'price': price,
-                        'nav': nav,
-                        'premium_rate': premium_rate,
-                        'amount': amount,
-                        'volume': volume,
-                        'fund_type': fund_type,
-                        'apply_status': cell.get('apply_status', '-')
-                    }
-                    results.append(fund_info)
-            except (ValueError, TypeError):
+            fund_id = cell.get('fund_id')
+            
+            # 提取价格和净值 (兼容不同的字段名)
+            price_val = cell.get('price')
+            nav_val = cell.get('fund_nav') or cell.get('nav')
+            
+            if price_val in (None, '-', '登录查看') or nav_val in (None, '-', '登录查看'):
                 continue
                 
-        print(f"Found {len(results)} {fund_type} funds with premium > {PREMIUM_THRESHOLD}%")
+            price = float(price_val)
+            nav = float(nav_val)
+            
+            # T-1 净值估算逻辑
+            ref_inc_rt_str = str(cell.get('ref_increase_rt', '0')).replace('%', '')
+            try:
+                ref_inc_rt = float(ref_inc_rt_str)
+            except:
+                ref_inc_rt = 0.0
+                
+            est_nav = nav * (1 + ref_inc_rt / 100.0) if ref_inc_rt != 0 else nav
+            
+            if est_nav <= 0: continue
+            premium = ((price - est_nav) / est_nav) * 100
+            
+            # 申购状态筛选
+            apply_status = cell.get('apply_status', '-')
+            is_open = '开放' in apply_status or apply_status in ('-', '')
+            
+            # 规模与流动性
+            amount = float(str(cell.get('amount', 0)).replace(',', '')) # 万份
+            volume = float(str(cell.get('volume', 0)).replace(',', '')) # 万元
+            
+            if premium > PREMIUM_THRESHOLD and (amount >= MIN_SHARE or volume >= MIN_TURNOVER):
+                if ONLY_OPEN and not is_open:
+                    continue
+                
+                results.append({
+                    'fund_id': fund_id,
+                    'fund_name': cell.get('fund_nm'),
+                    'price': price,
+                    'nav': round(est_nav, 4),
+                    'premium_rate': round(premium, 2),
+                    'is_estimated_nav': ref_inc_rt != 0,
+                    'amount': amount,
+                    'volume': volume,
+                    'fund_type': fund_type,
+                    'apply_status': apply_status
+                })
+                
+        print(f"[OK] 符合条件的 {fund_type}：{len(results)} 只")
         return results
         
     except Exception as e:
-        print(f"Error occurred while fetching {fund_type}: {e}")
+        print(f"[!] 抓取异常: {e}")
         return []
 
 def main():
-    print("Starting Jisilu LOF/IOF Scraper...")
+    all_results = []
+    for fund_type, url in URLS.items():
+        all_results.extend(fetch_data(url, fund_type))
     
-    # 1. Fetch Stock LOF
-    stock_records = fetch_data(STOCK_LOF_URL, "Stock LOF")
-    
-    # 2. Fetch Index LOF
-    index_records = fetch_data(INDEX_LOF_URL, "Index LOF")
-
-    all_records = stock_records + index_records
-    
-    # Save to centralized DB
-    save_data('lof_funds', all_records)
-    
-    print("\nLOF Task Complete.")
+    if all_results:
+        save_data('lof_funds', all_results)
+    print("\n[DONE] LOF 抓取任务完成。")
 
 if __name__ == "__main__":
     main()
