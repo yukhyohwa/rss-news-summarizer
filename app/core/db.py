@@ -35,6 +35,7 @@ def init_db():
             volume REAL,
             fund_type TEXT,
             apply_status TEXT,
+            is_estimated_nav INTEGER,
             date TEXT,
             timestamp DATETIME
         )
@@ -46,6 +47,12 @@ def init_db():
     except sqlite3.OperationalError:
         print("[DB] Adding 'nav' column to lof_funds table...")
         cursor.execute("ALTER TABLE lof_funds ADD COLUMN nav REAL")
+        
+    try:
+        cursor.execute("SELECT is_estimated_nav FROM lof_funds LIMIT 1")
+    except sqlite3.OperationalError:
+        print("[DB] Adding 'is_estimated_nav' column to lof_funds table...")
+        cursor.execute("ALTER TABLE lof_funds ADD COLUMN is_estimated_nav INTEGER DEFAULT 0")
     
     # Bond Issuance Table (New Bonds)
     cursor.execute('''
