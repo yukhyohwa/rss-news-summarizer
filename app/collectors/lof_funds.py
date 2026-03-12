@@ -1,19 +1,20 @@
-import requests
 import time
 import random
+import os
+from dotenv import load_dotenv
 from app.core.db import save_data
+from app.core.jsl_session import get_jsl_session
 from config.settings import STRATEGY_CONFIG
+
+# Load environment variables
+load_dotenv()
 
 config = STRATEGY_CONFIG['lof']
 
 # Configuration
 STOCK_LOF_URL = "https://www.jisilu.cn/data/lof/stock_lof_list/"
 INDEX_LOF_URL = "https://www.jisilu.cn/data/lof/index_lof_list/"
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    "X-Requested-With": "XMLHttpRequest",
-    "Referer": "https://www.jisilu.cn/data/lof/"
-}
+
 # Thresholds from settings
 PREMIUM_THRESHOLD = config['min_premium_rate']
 MIN_AMOUNT_THRESHOLD = config['min_fund_share'] / 10000.0  # Convert to 'Wan'
@@ -23,10 +24,13 @@ def fetch_data(url, fund_type):
     """Fetch data from the given URL and return filtered list."""
     print(f"Fetching {fund_type} data from {url}...")
     
-    # Simulate user browsing behavior with random sleep (larger interval as requested)
+    # Simulate user browsing behavior with random sleep
     sleep_time = random.uniform(3, 8)
-    print(f"Sleeping for {sleep_time:.2f} seconds to simulate human behavior...")
+    print(f"Sleeping for {sleep_time:.2f} seconds...")
     time.sleep(sleep_time)
+    
+    # Get session (ensures active login)
+    session = get_jsl_session()
     
     try:
         # Add timestamp to params to prevent caching
@@ -36,7 +40,8 @@ def fetch_data(url, fund_type):
             '___jsl': f'LST___t={int(time.time() * 1000)}'
         }
         
-        response = requests.post(url, headers=HEADERS, data=params)
+        # Use simple POST instead of session.post with custom headers if session already handles it
+        response = session.post(url, data=params)
         
         if response.status_code != 200:
             print(f"Failed to fetch data. Status code: {response.status_code}")
@@ -47,32 +52,30 @@ def fetch_data(url, fund_type):
         except Exception as e:
             print(f"Failed to decode JSON. Response text preview: {response.text[:200]}")
             return []
+            
         rows = data.get('rows', [])
         
         results = []
         for row in rows:
             cell = row.get('cell', {})
             try:
-                # Extract fields
-                discount_rt = cell.get('discount_rt')
+                # Extract Price and NAV for manual calculation (robust to guest/missing fields)
+                price_val = cell.get('price')
+                fund_nav = cell.get('fund_nav') # Some endpoints use fund_nav
                 
-                # Check for valid discount rate
-                if not discount_rt or discount_rt == '-':
+                # Check for valid price and NAV (especially for guest users or hidden rows)
+                if price_val in (None, '-', '登录查看') or fund_nav in (None, '-', '登录查看'):
                     continue
-                    
-                # From empirical check: discount_rt in JSON seems to be Premium Rate (positive for premium)
-                # Example: Price 2.27, NAV 1.91 -> discount_rt 18.95%
                 
-                val_str = str(discount_rt).replace('%', '')
-                val = float(val_str)
+                price = float(price_val)
+                nav = float(fund_nav)
                 
-                premium_rate = val 
+                # Formula: (Price - NAV) / NAV * 100
+                premium_rate = ((price - nav) / nav) * 100
                 
                 # Liquidity/Size Filter
-                # amount: Total Shares in 'Wan' (10,000)
-                # volume: Turnover in 'Wan' (10,000) (Based on common Jisilu units)
-                amount = float(cell.get('amount', 0))
-                volume = float(cell.get('volume', 0)) # Sometimes volume is turnover
+                amount = float(str(cell.get('amount', 0)).replace(',', ''))
+                volume = float(str(cell.get('volume', 0)).replace(',', ''))
                 
                 is_liquid = (amount > MIN_AMOUNT_THRESHOLD) or (volume > MIN_VOLUME_THRESHOLD)
                 
@@ -80,7 +83,8 @@ def fetch_data(url, fund_type):
                     fund_info = {
                         'fund_id': cell.get('fund_id'),
                         'fund_name': cell.get('fund_nm'),
-                        'price': cell.get('price'),
+                        'price': price,
+                        'nav': nav,
                         'premium_rate': premium_rate,
                         'amount': amount,
                         'volume': volume,
@@ -104,7 +108,6 @@ def main():
     # 1. Fetch Stock LOF
     stock_records = fetch_data(STOCK_LOF_URL, "Stock LOF")
     
-    # 2. Fetch Index LOF
     # 2. Fetch Index LOF
     index_records = fetch_data(INDEX_LOF_URL, "Index LOF")
 

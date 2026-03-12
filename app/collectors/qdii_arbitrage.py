@@ -1,8 +1,13 @@
-import requests
 import time
 import random
+import os
+from dotenv import load_dotenv
 from app.core.db import save_data
+from app.core.jsl_session import get_jsl_session
 from config.settings import STRATEGY_CONFIG
+
+# Load environment variables
+load_dotenv()
 
 config = STRATEGY_CONFIG.get('qdii', {
     'min_premium_rate': 2.0,
@@ -17,12 +22,6 @@ URLS = {
     'Commodities': 'https://www.jisilu.cn/data/qdii/qdii_list/C'
 }
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    "X-Requested-With": "XMLHttpRequest",
-    "Referer": "https://www.jisilu.cn/data/qdii/"
-}
-
 # Thresholds from settings
 PREMIUM_THRESHOLD = config.get('min_premium_rate', 2.0)
 MIN_AMOUNT_THRESHOLD = config.get('min_fund_share', 100000) / 10000.0  # Convert to 'Wan'
@@ -32,20 +31,22 @@ def fetch_qdii_data(market_name, url):
     """Fetch QDII data from the given URL and return filtered list."""
     print(f"Fetching {market_name} QDII data from {url}...")
     
-    # Simulate user browsing behavior with random sleep
+    # Simulate user browsing behavior
     sleep_time = random.uniform(2, 5)
     print(f"Sleeping for {sleep_time:.2f} seconds...")
     time.sleep(sleep_time)
+    
+    session = get_jsl_session()
     
     try:
         params = {
             'rp': 500,
             'only_lof': 'y',
-            'only_etf': 'n',  # Exclude EOF/ETF as retail investors can't easily arbitrate them
+            'only_etf': 'n',
             '___jsl': f'LST___t={int(time.time() * 1000)}'
         }
         
-        response = requests.get(url, headers=HEADERS, params=params)
+        response = session.get(url, params=params)
         
         if response.status_code != 200:
             print(f"Failed to fetch data. Status code: {response.status_code}")
@@ -66,26 +67,27 @@ def fetch_qdii_data(market_name, url):
                 fund_id = cell.get('fund_id')
                 fund_name = cell.get('fund_nm')
                 
-                # Skip ETF funds explicitly if they still appear in the list
                 if 'ETF' in fund_name.upper():
                     continue
 
-                # Premium rates
-                discount_rt_str = str(cell.get('discount_rt', '0')).replace('%', '')
-                discount_rt2_str = str(cell.get('discount_rt2', '0')).replace('%', '')
+                # Price and NAV/Estimate for calculation
+                price_val = cell.get('price')
+                # T-1 NAV (fund_nav) and Realtime Estimate (estimate_value2)
+                nav_val = cell.get('fund_nav') 
+                est2_val = cell.get('estimate_value2')
                 
-                # Handle 'buy' or '-' values in premium rates
+                # Manual Premium Calculation (Guest-proof and account-robust)
                 premium_rate = 0.0
-                if discount_rt_str not in ('buy', '-', ''):
-                    premium_rate = float(discount_rt_str)
+                if price_val not in (None, '-', 'buy', '登录查看') and nav_val not in (None, '-', 'buy', '登录查看'):
+                    premium_rate = (float(price_val) - float(nav_val)) / float(nav_val) * 100
                 
                 realtime_premium_rate = 0.0
-                if discount_rt2_str not in ('buy', '-', ''):
-                    realtime_premium_rate = float(discount_rt2_str)
+                if price_val not in (None, '-', 'buy', '登录查看') and est2_val not in (None, '-', 'buy', '登录查看'):
+                    realtime_premium_rate = (float(price_val) - float(est2_val)) / float(est2_val) * 100
                 
                 # Liquidity/Size Filter
-                amount = float(cell.get('amount', 0) or 0)
-                volume = float(cell.get('volume', 0) or 0)
+                amount = float(str(cell.get('total_share', cell.get('amount', 0))).replace(',', '') or 0)
+                volume = float(str(cell.get('volume', 0)).replace(',', '') or 0)
                 
                 is_liquid = (amount > MIN_AMOUNT_THRESHOLD) or (volume > MIN_VOLUME_THRESHOLD)
                 
@@ -96,18 +98,12 @@ def fetch_qdii_data(market_name, url):
                 
                 # Filter: Premium > Threshold AND Liquid AND Not Suspended
                 if max_premium > PREMIUM_THRESHOLD and is_liquid and apply_status != '暂停申购':
-                    # Clean up estimate values
-                    est_val = cell.get('estimate_value', '-')
-                    est_val2 = cell.get('estimate_value2', '-')
-                    
                     fund_info = {
                         'fund_id': fund_id,
                         'fund_name': fund_name,
-                        'price': float(cell.get('price', 0) or 0),
+                        'price': float(price_val) if price_val not in (None, '-', 'buy') else 0,
                         'premium_rate': premium_rate,
-                        'estimate_value': float(est_val) if est_val not in ('buy', '-', '') else None,
                         'realtime_premium_rate': realtime_premium_rate,
-                        'realtime_estimate_value': float(est_val2) if est_val2 not in ('buy', '-', '') else None,
                         'volume': volume,
                         'amount': amount,
                         'index_name': cell.get('index_nm'),
@@ -115,8 +111,7 @@ def fetch_qdii_data(market_name, url):
                         'market_type': market_name
                     }
                     results.append(fund_info)
-            except (ValueError, TypeError) as e:
-                # print(f"Error parsing row for {cell.get('fund_id')}: {e}")
+            except (ValueError, TypeError):
                 continue
                 
         print(f"Found {len(results)} QDII funds in {market_name} with premium > {PREMIUM_THRESHOLD}%")
@@ -135,7 +130,6 @@ def main():
         all_records.extend(records)
     
     if all_records:
-        # Save to centralized DB
         save_data('qdii_arbitrage', all_records)
         print(f"Total {len(all_records)} QDII records saved.")
     else:

@@ -21,7 +21,16 @@ def generate_unified_report(categorized_news=None, include_arb=True):
     if categorized_news:
         report_content += "## 🌏 Global News Summary\n\n"
         all_categories = list(categorized_news.keys())
-        categories_order = [c for c in all_categories if c != "Others"]
+        
+        # Define target order
+        target_order = ["Technology", "Economy & Finance", "Politics & International", "Energy & Environment"]
+        
+        # Build final display order
+        categories_order = [c for c in target_order if c in categorized_news]
+        # Collect any remaining categories not in target_order
+        remaining = [c for c in all_categories if c not in target_order and c != "Others"]
+        categories_order.extend(remaining)
+        
         if "Others" in all_categories:
             categories_order.append("Others")
         
@@ -158,7 +167,8 @@ def generate_unified_report(categorized_news=None, include_arb=True):
             report_content += "*No SPAC arbitrage opportunities found today.*\n\n"
 
         # 11. CEF
-        report_content += f"### 11. CEF Arbitrage (Disc < {STRATEGY_CONFIG['cef']['min_discount']}%, Vol USD >= 10,000K)\n"
+        min_vol_k = STRATEGY_CONFIG['cef']['min_volume_usd'] // 1000
+        report_content += f"### 11. CEF Arbitrage (Disc < {STRATEGY_CONFIG['cef']['min_discount']}%, Vol USD >= {min_vol_k:,}K)\n"
         rows, cols = fetch_daily_data('cef_arbitrage', today)
         if rows:
             display_rows = []
@@ -167,8 +177,8 @@ def generate_unified_report(categorized_news=None, include_arb=True):
                 diff = discount - avg_disc
                 vol_usd = (r[10] or 0) * price
                 
-                # Volume Filter: Vol USD >= 10000k (10,000,000 USD)
-                if vol_usd < 10000000:
+                # Volume Filter from STRATEGY_CONFIG
+                if vol_usd < STRATEGY_CONFIG['cef']['min_volume_usd']:
                     continue
                     
                 dist_status = r[11] if len(r) > 11 else ""

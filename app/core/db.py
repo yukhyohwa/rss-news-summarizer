@@ -29,6 +29,7 @@ def init_db():
             fund_id TEXT,
             fund_name TEXT,
             price REAL,
+            nav REAL,
             premium_rate REAL,
             amount REAL,
             volume REAL,
@@ -38,6 +39,13 @@ def init_db():
             timestamp DATETIME
         )
     ''')
+    
+    # Simple migration for existing lof_funds table missing 'nav' column
+    try:
+        cursor.execute("SELECT nav FROM lof_funds LIMIT 1")
+    except sqlite3.OperationalError:
+        print("[DB] Adding 'nav' column to lof_funds table...")
+        cursor.execute("ALTER TABLE lof_funds ADD COLUMN nav REAL")
     
     # Bond Issuance Table (New Bonds)
     cursor.execute('''
