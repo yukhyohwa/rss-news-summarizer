@@ -98,20 +98,35 @@ def fetch_qdii_data(market_name, url):
                 if price_val not in (None, '-', 'buy', '登录查看') and est2_val not in (None, '-', 'buy', '登录查看'):
                     realtime_premium_rate = (float(price_val) - float(est2_val)) / float(est2_val) * 100
                 
-                # Liquidity/Size Filter
-                amount = float(str(cell.get('total_share', cell.get('amount', 0))).replace(',', '') or 0)
-                volume = float(str(cell.get('volume', 0)).replace(',', '') or 0)
+                # Liquidity/Size Filter - Safely handle None or invalid strings
+                def safe_float(val):
+                    if val in (None, '-', ''): return 0.0
+                    try:
+                        return float(str(val).replace(',', ''))
+                    except (ValueError, TypeError):
+                        return 0.0
+
+                # Try total_share first, then amount
+                raw_amount = cell.get('total_share')
+                if raw_amount in (None, '-', ''):
+                    raw_amount = cell.get('amount', 0)
+                
+                amount = safe_float(raw_amount)
+                volume = safe_float(cell.get('volume', 0))
                 
                 is_liquid = (amount > MIN_AMOUNT_THRESHOLD) or (volume > MIN_VOLUME_THRESHOLD)
                 
-                # Use max of T-1 and Realtime premium for filtering
-                max_premium = max(premium_rate, realtime_premium_rate)
+                # Use the one with the larger absolute value for filtering
+                if abs(premium_rate) >= abs(realtime_premium_rate):
+                    target_premium = premium_rate
+                else:
+                    target_premium = realtime_premium_rate
                 
                 apply_status = cell.get('apply_status', '')
                 is_open = '开放' in apply_status or not apply_status
                 
                 # Filter: |Premium| > Threshold AND Liquid AND (Optionally) Open for Apply
-                if abs(max_premium) > PREMIUM_THRESHOLD and is_liquid:
+                if abs(target_premium) > PREMIUM_THRESHOLD and is_liquid:
                     if ONLY_OPEN_APPLY and not is_open:
                         continue
                         
