@@ -56,14 +56,24 @@ def fetch_data(url, fund_type):
             price = float(price_val)
             nav = float(nav_val)
             
-            # T-1 净值估算逻辑
+            # 1. 优先提取盘中实时估值 (IOPV)
+            est_val_str = cell.get('estimate_value')
+            try:
+                est_real = float(str(est_val_str).replace(',', '')) if est_val_str not in (None, '-', '登录查看', '') else 0.0
+            except:
+                est_real = 0.0
+                
+            # 2. 若无实时估值，使用 T-1 或 T-2 净值配合指数涨幅估算
             ref_inc_rt_str = str(cell.get('ref_increase_rt', '0')).replace('%', '')
             try:
                 ref_inc_rt = float(ref_inc_rt_str)
             except:
                 ref_inc_rt = 0.0
                 
-            est_nav = nav * (1 + ref_inc_rt / 100.0) if ref_inc_rt != 0 else nav
+            nav_with_idx = nav * (1 + ref_inc_rt / 100.0) if ref_inc_rt != 0 else nav
+            
+            # 3. 优先使用实时估值，没有再用参考估值
+            est_nav = est_real if est_real > 0 else nav_with_idx
             
             if est_nav <= 0: continue
             premium = ((price - est_nav) / est_nav) * 100
