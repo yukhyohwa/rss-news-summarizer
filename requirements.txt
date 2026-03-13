@@ -7,3 +7,4 @@ yfinance
 python-dotenv
 curl_cffi
 markdown
+ddddocr

@@ -76,7 +76,7 @@ def fetch_data(url, fund_type):
             amount = float(str(cell.get('amount', 0)).replace(',', '')) # 万份
             volume = float(str(cell.get('volume', 0)).replace(',', '')) # 万元
             
-            if premium > PREMIUM_THRESHOLD and (amount >= MIN_SHARE or volume >= MIN_TURNOVER):
+            if abs(premium) > PREMIUM_THRESHOLD and (amount >= MIN_SHARE or volume >= MIN_TURNOVER):
                 if ONLY_OPEN and not is_open:
                     continue
                 

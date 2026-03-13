@@ -89,7 +89,7 @@ def generate_unified_report(categorized_news=None, include_arb=True):
             report_content += "*No commodity data available.*\n\n"
 
         # 4. LOF/IOF
-        report_content += f"### 4. LOF/IOF Funds (Premium > {STRATEGY_CONFIG['lof']['min_premium_rate']}%)\n"
+        report_content += f"### 4. LOF/IOF Funds (|Premium| > {STRATEGY_CONFIG['lof']['min_premium_rate']}%)\n"
         rows, cols = fetch_daily_data('lof_funds', today, "fund_id, fund_name, price, premium_rate, amount, volume, apply_status")
         if rows:
             display_rows = []
@@ -103,7 +103,7 @@ def generate_unified_report(categorized_news=None, include_arb=True):
             report_content += "*No arbitrage opportunities found today.*\n\n"
 
         # 5. QDII
-        report_content += f"### 5. QDII Arbitrage (Premium > {STRATEGY_CONFIG['qdii']['min_premium_rate']}%)\n"
+        report_content += f"### 5. QDII Arbitrage (|Premium| > {STRATEGY_CONFIG['qdii']['min_premium_rate']}%)\n"
         rows, cols = fetch_daily_data('qdii_arbitrage', today)
         if rows:
             display_rows = []

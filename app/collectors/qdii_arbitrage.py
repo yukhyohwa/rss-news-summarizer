@@ -110,8 +110,8 @@ def fetch_qdii_data(market_name, url):
                 apply_status = cell.get('apply_status', '')
                 is_open = '开放' in apply_status or not apply_status
                 
-                # Filter: Premium > Threshold AND Liquid AND (Optionally) Open for Apply
-                if max_premium > PREMIUM_THRESHOLD and is_liquid:
+                # Filter: |Premium| > Threshold AND Liquid AND (Optionally) Open for Apply
+                if abs(max_premium) > PREMIUM_THRESHOLD and is_liquid:
                     if ONLY_OPEN_APPLY and not is_open:
                         continue
                         
